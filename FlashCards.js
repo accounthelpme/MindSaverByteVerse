@@ -54,7 +54,7 @@ async function generateFlashcards() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer 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" // << Use a regenerated key here
+        "Authorization": "" 
       },
       body: JSON.stringify({
         model: "gpt-3.5-turbo",
