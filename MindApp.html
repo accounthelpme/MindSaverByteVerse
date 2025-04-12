@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindSaver - Notes to Memory</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+    }
+    textarea, input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 16px;
+    }
+    #flashcards {
+      margin-top: 20px;
+    }
+    .card {
+      background: #fff;
+      padding: 20px;
+      margin: 10px 0;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .question {
+      font-weight: bold;
+    }
+    .answer {
+      display: none;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>MindSaver - Notes to Memory</h1>
+  <textarea id="noteInput" placeholder="Write your study note here..."></textarea>
+  <button onclick="generateFlashcards()">Generate Flashcards</button>
+  <div id="flashcards"></div>
+</body>
+</html>
