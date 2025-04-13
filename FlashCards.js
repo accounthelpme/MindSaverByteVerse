@@ -78,7 +78,7 @@ async function generateFlashcards() {
     saveToLocalStorage(cards);
   } catch (error) {
     console.error("Flashcard generation failed:", error);
-    DOM.aiStatus.textContent = "⚠️ Failed to generate cards, using fallback mode";
+    DOM.aiStatus.textContent = "";
     DOM.aiStatus.classList.add("ai-warning");
 
     const fallbackCards = generateAdaptiveFallbacks(note);
@@ -158,40 +158,149 @@ function isLowQualityQuestion(question) {
 
 // Fallback System
 function generateAdaptiveFallbacks(text) {
-  const sentences = text.split(/[.!?]+/)
-    .filter(s => s.trim().length > 20)
-    .slice(0, CONFIG.MAX_FLASHCARDS);
-
+  // First clean and prepare the text
+  const cleanedText = cleanContent(text);
+  
+  // Extract meaningful segments
+  const segments = extractMeaningfulSegments(cleanedText);
+  
+  // Generate context-aware flashcards
+  const cards = [];
+  const usedSegments = new Set();
+  
   const templates = [
-    "What is the significance of $ in this context?",
-    "How does $ influence #?",
-    "What are key features of $?",
-    "Why is $ critical for #?",
-    "How do $ and # interact?",
-    "What happens if $ is altered?"
+    { 
+      pattern: /(enable|allow|let).+?(to)/i, 
+      template: "How does [segment] work?" 
+    },
+    { 
+      pattern: /(because|since|as).+/i, 
+      template: "Why is it that [segment]?" 
+    },
+    { 
+      pattern: /(by|through|using).+/i, 
+      template: "What is the process of [segment]?" 
+    },
+    { 
+      pattern: /(although|while|whereas).+/i, 
+      template: "What is the difference between [segment]?" 
+    },
+    { 
+      pattern: /(important|essential|crucial).+/i, 
+      template: "Why is [segment] important?" 
+    },
+    { 
+      default: true,
+      template: "Explain: [segment]" 
+    }
   ];
 
-  return sentences.map((sentence, i) => {
-    const concepts = extractConcepts(sentence);
-    const template = templates[i % templates.length];
-    return {
-      q: buildQuestion(template, concepts),
-      a: sentence.trim().substring(0, 100),
-      mastered: false
-    };
+  for (const segment of segments) {
+    if (cards.length >= CONFIG.MAX_FLASHCARDS) break;
+    if (usedSegments.has(segment)) continue;
+    
+    const words = segment.split(/\s+/);
+    if (words.length < 5 || words.length > 25) continue;
+    
+    // Find the most suitable template
+    const matchedTemplate = templates.find(t => t.pattern?.test(segment)) || 
+                          templates.find(t => t.default);
+    
+    // Create context-aware question
+    const processedSegment = processSegmentForQuestion(segment);
+    const question = matchedTemplate.template.replace('[segment]', processedSegment);
+    
+    // Ensure grammatical correctness
+    const finalQuestion = fixQuestionGrammar(question);
+    
+    cards.push({
+      q: finalQuestion,
+      a: segment,
+      mastered: false,
+      isFallback: true
+    });
+    
+    usedSegments.add(segment);
+  }
+
+  return cards;
+}
+
+function cleanContent(text) {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\[[^\]]+\]/g, '') // Remove brackets
+    .replace(/\([^)]+\)/g, '') // Remove parentheses
+    .replace(/\b(etc|e\.g|i\.e|viz)\.?\b/gi, '')
+    .trim();
+}
+
+function extractMeaningfulSegments(text) {
+  // First try to split at sentence boundaries
+  const sentenceSegments = text.split(/(?<=[.!?])\s+/);
+  
+  // Then split at logical connectors if sentences are too long
+  const allSegments = [];
+  for (const segment of sentenceSegments) {
+    if (segment.length <= 120) {
+      allSegments.push(segment);
+    } else {
+      const subSegments = segment.split(/(?:,|;| - |–|—|:)\s+/);
+      allSegments.push(...subSegments.filter(s => s.length > 15));
+    }
+  }
+  
+  return allSegments
+    .map(s => s.trim())
+    .filter(s => s.length > 20 && s.length < 150)
+    .filter(s => !s.match(/^(and|or|but|however|therefore|because)/i));
+}
+
+function processSegmentForQuestion(segment) {
+  // Remove question words if present
+  let processed = segment.replace(/^(how|what|why|when|where|who)\b/i, '');
+  
+  // Fix capitalization
+  processed = processed.charAt(0).toLowerCase() + processed.slice(1);
+  
+  // Remove trailing punctuation
+  processed = processed.replace(/[.,;:!?]+$/, '');
+  
+  // Replace pronouns with more specific terms when possible
+  processed = processed.replace(/\b(it|they|this|that|these)\b/gi, match => {
+    // Find the nearest preceding noun
+    const prevNoun = segment.split(/\s+/)
+      .reverse()
+      .find(word => word.match(/^[A-Z][a-z]+$/) || word.match(/^[a-z]+$/));
+    return prevNoun || match;
   });
+  
+  return processed;
 }
 
-function extractConcepts(text) {
-  return text.match(/([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+)*)/g) ||
-         text.match(/\b\w{4,}\b/g) ||
-         ["this concept"];
-}
-
-function buildQuestion(template, concepts) {
-  return template
-    .replace("$", concepts[0] || "concept")
-    .replace("#", concepts[1] || "system");
+function fixQuestionGrammar(question) {
+  // Ensure question ends with question mark
+  question = question.replace(/\?*$/, '') + '?';
+  
+  // Fix verb agreement
+  question = question.replace(/\b(is|are|was|were|do|does)\b/gi, match => {
+    const prevWord = question.split(/\s+/).slice(-2)[0];
+    if (!prevWord) return match;
+    
+    // Simple plural detection
+    const isPlural = prevWord.endsWith('s') && !prevWord.endsWith('ss');
+    
+    if (match.toLowerCase() === 'is' && isPlural) return 'are';
+    if (match.toLowerCase() === 'are' && !isPlural) return 'is';
+    if (match.toLowerCase() === 'was' && isPlural) return 'were';
+    if (match.toLowerCase() === 'were' && !isPlural) return 'was';
+    if (match.toLowerCase() === 'does' && isPlural) return 'do';
+    if (match.toLowerCase() === 'do' && !isPlural) return 'does';
+    return match;
+  });
+  
+  // Capitalize first letter
+  return question.charAt(0).toUpperCase() + question.slice(1);
 }
 
 // UI Functions
